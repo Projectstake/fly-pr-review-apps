@@ -42,6 +42,7 @@ if ! flyctl status --app "$app"; then
   # Restore the original config file
   cp "$config.bak" "$config"
 fi
+
 if [ -n "$INPUT_SECRETS" ]; then
   echo $INPUT_SECRETS | tr " " "\n" | flyctl secrets import --app "$app"
 fi
@@ -58,9 +59,11 @@ fi
 if [ -n "$INPUT_VM" ]; then
   flyctl scale --app "$app" vm "$INPUT_VM"
 fi
+
 if [ -n "$INPUT_MEMORY" ]; then
   flyctl scale --app "$app" memory "$INPUT_MEMORY"
 fi
+
 if [ -n "$INPUT_COUNT" ]; then
   flyctl scale --app "$app" count "$INPUT_COUNT"
 fi
