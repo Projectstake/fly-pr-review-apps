@@ -13,7 +13,7 @@ if [ -z "$PR_NUMBER" ]; then
   exit 1
 fi
 
-REPO_NAME=$(echo $GITHUB_REPOSITORY | tr "/" "-")
+REPO_NAME=$(echo $GITHUB_REPOSITORY | tr "/" "-" | tr '[:upper:]' '[:lower:]')
 EVENT_TYPE=$(jq -r .action /github/workflow/event.json)
 
 # Default the Fly app name to pr-{number}-{repo_name}
