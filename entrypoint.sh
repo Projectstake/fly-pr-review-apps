@@ -29,38 +29,73 @@ if ! echo "$app" | grep "$PR_NUMBER"; then
   exit 1
 fi
 
-# PR was closed - remove the Fly app if one exists and exit.
-if [ "$EVENT_TYPE" = "closed" ]; then
-  if [ -n "$INPUT_POSTGRES" ]; then
-    apk add expect
+# Detaches the specified Postgres cluster from a Fly app.
+function detach_postgres() {
+  local app=$1
+  local postgres=$2
 
-    # Detach app from postgres cluster and database.
-    expect -c "
-      spawn flyctl postgres detach "$INPUT_POSTGRES" --app "$app"
-      expect {Select the attachment that you would like to detach*}
-      send -- \"\r\"
-      expect eof
-    "
-  fi
+  apk add expect
 
-  # Destroy the Fly app
+  expect -c "
+    spawn flyctl postgres detach \"$postgres\" --app \"$app\"
+    expect \"Select the attachment that you would like to detach*\"
+    send -- \"\r\"
+    expect eof
+  "
+}
+
+# Destroys the specfied Fly app.
+function destroy_app() {
+  local app=$1
   flyctl apps destroy "$app" -y || true
-  exit 0
-fi
+}
 
-# Backup the original config file since 'flyctl launch' messes up the [build.args] section
-cp "$config" "$config.bak"
+# Creates a new Fly app with the specified name in the specified Fly org,
+# without deploying it. If, on app creation, a Postgres cluster `$app-db` is
+# created and attached to the app, the cluster will be detached and destroyed.
+function create_app() {
+  local app=$1
+  local org=$2
 
-# Deploy the Fly app, creating it first if needed.
-if ! flyctl status --app "$app"; then
   # Install elixir
   apk add elixir
   apk add inotify-tools
   mix local.hex --force
   mix local.rebar --force
 
-  # Launch new app
+  # Launch a new Fly app without deploying it.
   flyctl launch --no-deploy --copy-config --name "$app" --region "$region" --org "$org" --remote-only --ha=false || true
+
+  # If a Postgres app with the name format `{pr-preview-app-name}-db` is
+  # attached by `fly launch`, detach and destroy it
+  if fly postgres users list --app "$app-db"; then
+    detach_postgres "$app" "$app-db"
+    destroy_app "$app-db"
+  fi
+}
+
+# PR was closed - remove the Fly app if one exists and exit.
+if [ "$EVENT_TYPE" = "closed" ]; then
+  if [ -n "$INPUT_POSTGRES" ]; then
+    detach_postgres "$INPUT_POSTGRES" "$app"
+  fi
+
+  # Destroy the Fly app
+  destroy_app "$app"
+  exit 0
+fi
+
+# Back up the original config file since 'flyctl launch' messes up the
+# [build.args] section.
+cp "$config" "$config.bak"
+
+# Deploy the Fly app, creating it if it does not exit. Else, destroy existing
+# app and recreate it
+if flyctl status --app "$app"; then
+  destroy_app "$app"
+  create_app "$app" "$org"
+else
+  create_app "$app" "$org"
 fi
 
 # Get list of secrets
@@ -98,7 +133,7 @@ if [ -n "$INPUT_SECRETS" ]; then
 fi
 
 # Deploy app
-flyctl deploy --config "$config" --app "$app" --region "$region" --image "$image" --strategy immediate
+flyctl deploy --config "$config" --app "$app" --regions "$region" --image "$image" --strategy immediate
 
 # Scale the VM
 if [ -n "$INPUT_VM" ]; then
