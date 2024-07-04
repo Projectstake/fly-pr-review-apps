@@ -24,6 +24,8 @@ image="$INPUT_IMAGE"
 config="${INPUT_CONFIG:-fly.toml}"
 database="${INPUT_DATABASE:-$app}"
 
+flyctl apps destroy --invalid
+
 if ! echo "$app" | grep "$PR_NUMBER"; then
   echo "For safety, this action requires the app's name to contain the PR number."
   exit 1
@@ -147,6 +149,8 @@ fi
 if [ -n "$INPUT_COUNT" ]; then
   flyctl scale --app "$app" count "$INPUT_COUNT"
 fi
+
+flyctl scale --app "$app" memory "$INPUT_MEMORY"
 
 # Make some info available to the GitHub workflow.
 flyctl status --app "$app" --json >status.json
