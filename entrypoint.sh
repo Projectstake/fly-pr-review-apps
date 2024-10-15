@@ -57,6 +57,10 @@ function create_app() {
   local app=$1
   local org=$2
 
+  # Configure Git to using `GITHUB_TOKEN` for authentication to enable access
+  # to private repositories.
+  git config --global url.https://x-access-token:$GITHUB_TOKEN@github.com/.insteadOf https://github.com/
+
   # Install elixir
   apk add elixir
   apk add inotify-tools
@@ -133,7 +137,7 @@ if [ -n "$INPUT_SECRETS" ]; then
 fi
 
 # Deploy app
-flyctl deploy --config "$config" --app "$app" --regions "$region" --image "$image" --strategy immediate
+flyctl deploy --config "$config" --app "$app" --regions "$region" --image "$image" --strategy immediate --build-secret GITHUB_TOKEN="$GITHUB_TOKEN"
 
 # Scale the VM
 if [ -n "$INPUT_VM" ]; then
