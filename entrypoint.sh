@@ -57,6 +57,10 @@ function create_app() {
   local app=$1
   local org=$2
 
+  # Configure Git to authenticate using `GITHUB_TOKEN` to access private
+  # repositories.
+  git config --global url.https://x-access-token:$GITHUB_TOKEN@github.com/.insteadOf https://github.com/
+
   # Install elixir
   apk add elixir
   apk add inotify-tools
@@ -132,8 +136,18 @@ if [ -n "$INPUT_SECRETS" ]; then
   echo $INPUT_SECRETS | tr " " "\n" | flyctl secrets import --app "$app"
 fi
 
-# Deploy app
-flyctl deploy --config "$config" --app "$app" --regions "$region" --image "$image" --strategy immediate
+# Deploy app with configuration for private GitHub repositories:
+#
+# 1. `GITHUB_TOKEN`: Allows cloning of private repositories during build
+# 2. `CACHEBUST`: Forces Docker to reconfigure Git on each build
+#
+# Docker caches Git credentials between builds, but `GITHUB_TOKEN` becomes
+# invalid after each build. `CACHEBUST` ensures Docker sets up fresh
+# credentials with `GITHUB_TOKEN`.
+flyctl deploy --config "$config" --app "$app" --regions "$region" --image "$image" \
+   --strategy immediate \
+   --build-secret GITHUB_TOKEN="$GITHUB_TOKEN" \
+   --build-arg CACHEBUST=$(date +%s)
 
 # Scale the VM
 if [ -n "$INPUT_VM" ]; then
